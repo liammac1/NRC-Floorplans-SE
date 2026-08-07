@@ -40,11 +40,27 @@
   .floor-btn.active .lvl{color:var(--line);}
   .floor-btn .dot{width:6px;height:6px;border-radius:50%;flex:0 0 auto;}
   #rail hr{border:none;border-top:1px dashed var(--line-dim);margin:6px 8px;width:204px;}
-  #legend{position:fixed;bottom:20px;left:20px;z-index:10;display:flex;gap:16px;flex-wrap:wrap;max-width:640px;
+  #legend{position:fixed;bottom:20px;left:20px;z-index:10;display:flex;gap:8px;flex-wrap:wrap;max-width:640px;
+    align-items:center;
     border:1px solid var(--line-dim);background:rgba(10,31,51,.72);backdrop-filter:blur(6px);
     padding:10px 14px;font-size:10px;color:var(--muted);}
-  #legend .item{display:flex;align-items:center;gap:6px;}
-  #legend .sw{width:9px;height:9px;flex:0 0 auto;}
+  .legend-item{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:6px;cursor:pointer;
+    padding:5px 8px;border:1px solid transparent;border-radius:4px;transition:background .12s, border-color .12s;}
+  .legend-item:hover{background:rgba(94,200,232,.08);}
+  .legend-item.armed{border-color:var(--line);background:rgba(94,200,232,.16);color:var(--paper);}
+  .legend-item .sw{width:10px;height:10px;flex:0 0 auto;border-radius:2px;box-shadow:0 0 0 1px rgba(255,255,255,.15) inset;}
+  #legend .divider{width:1px;align-self:stretch;background:var(--line-dim);margin:0 2px;}
+  #clearMarkupsBtn{all:unset;box-sizing:border-box;cursor:pointer;font-size:10px;color:var(--muted);
+    padding:5px 10px;border:1px solid var(--line-dim);border-radius:4px;transition:background .12s,color .12s;}
+  #clearMarkupsBtn:hover{background:rgba(255,90,78,.12);color:#ff9a90;border-color:#ff5a4e;}
+  #labelModeBtn{all:unset;box-sizing:border-box;cursor:pointer;font-size:10px;color:var(--muted);
+    padding:5px 10px;border:1px solid var(--line-dim);border-radius:4px;transition:background .12s,color .12s,border-color .12s;}
+  #labelModeBtn:hover{background:rgba(242,193,78,.1);color:#f2c14e;}
+  #labelModeBtn.armed{border-color:#f2c14e;background:rgba(242,193,78,.16);color:#f2c14e;}
+  #paintToast{position:fixed;bottom:70px;left:20px;z-index:11;color:var(--paper);font-size:10.5px;
+    border:1px solid var(--line);background:rgba(10,31,51,.9);padding:7px 12px;border-radius:4px;
+    opacity:0;transform:translateY(4px);transition:opacity .18s, transform .18s;pointer-events:none;}
+  #paintToast.show{opacity:1;transform:translateY(0);}
   #hint{position:fixed;bottom:20px;right:20px;z-index:10;color:var(--muted);font-size:10px;
     border:1px solid var(--line-dim);background:rgba(10,31,51,.72);backdrop-filter:blur(6px);
     padding:10px 14px;max-width:230px;line-height:1.6;}
@@ -69,7 +85,8 @@
 
 <div id="rail"></div>
 <div id="legend"></div>
-<div id="hint">Drag to orbit · scroll to zoom · click a floor to isolate it</div>
+<div id="paintToast">Select a colour above, then click a wall to paint it</div>
+<div id="hint">Drag to orbit · scroll to zoom · click a floor to isolate it<br>Click a colour, then click a wall to paint · right-click a wall to clear it<br>Click "+ Label", then click a wall to add a label · click a label to edit it · right-click a label to delete it</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script id="wall-data" type="application/json">
@@ -78,12 +95,39 @@
 <script>
 const WALL_DATA = JSON.parse(document.getElementById('wall-data').textContent);
 
+// Recenter every floor on its own elevator-core centroid, exactly. Earlier
+// versions relied on hand-measured core boxes to center each floor, which
+// left small per-floor offsets — enough that stacked floors (especially the
+// rotated tower) could look like the core/stairs drift or overhang instead
+// of running straight up. Computing the true centroid of each floor's
+// 'core' segments and shifting everything (walls, core, stairs, bbox, stair
+// labels) by that exact amount guarantees every floor's elevator core sits
+// at local (0,0) — so stacked floors line up precisely, by construction,
+// not by estimate.
+function segCentroid(segs){
+  let sx=0, sz=0, n=0;
+  segs.forEach(s=>{ sx+=s[0]+s[2]; sz+=s[1]+s[3]; n+=2; });
+  return n? {x:sx/n, z:sz/n} : {x:0,z:0};
+}
+Object.keys(WALL_DATA).forEach(fid=>{
+  const wd = WALL_DATA[fid];
+  const src = wd.segments.core.length ? wd.segments.core : wd.segments.wall;
+  const c = segCentroid(src);
+  if(Math.abs(c.x)<1e-6 && Math.abs(c.z)<1e-6) return;
+  ['wall','core','stair'].forEach(cls=>{
+    wd.segments[cls] = wd.segments[cls].map(s=>[s[0]-c.x, s[1]-c.z, s[2]-c.x, s[3]-c.z]);
+  });
+  wd.bbox = {minX:wd.bbox.minX-c.x, maxX:wd.bbox.maxX-c.x, minZ:wd.bbox.minZ-c.z, maxZ:wd.bbox.maxZ-c.z};
+  wd.stairLabels = wd.stairLabels.map(s=>({x:s.x-c.x, z:s.z-c.z, label:s.label}));
+});
+
 const COLORS = {
   slab:   0x1c2f42,
   wall:   0x6f92ab,   // traced generic wall
   core:   0xe8a13c,   // elevator core (amber)
   stair:  0xff5a4e,   // exit stairs (red)
   guest:  0xb9d3e6,
+  label:  0xf2c14e,   // custom user labels
   outline:0x5ec8e8
 };
 function colorFor(k){ return COLORS[k]!==undefined ? COLORS[k] : 0x888888; }
@@ -145,18 +189,42 @@ function addWallBox(positions, x1,z1,x2,z2, thickness, h, yBase){
   quad(3,2,1,0); quad(4,5,6,7); quad(0,1,5,4); quad(1,2,6,5); quad(2,3,7,6); quad(3,0,4,7);
 }
 
-function buildWallMesh(segments, h, colorKey, yBase, opacity){
+function buildWallMesh(segments, h, colorKey, yBase, floorId, cls){
   if(!segments || segments.length===0) return null;
   const positions = [];
-  segments.forEach(s=> addWallBox(positions, s[0],s[1],s[2],s[3], WALL_T, h, yBase));
+  const colors = [];
+  const baseColor = new THREE.Color(colorFor(colorKey));
+  segments.forEach(s=>{
+    addWallBox(positions, s[0],s[1],s[2],s[3], WALL_T, h, yBase);
+    for(let i=0;i<36;i++) colors.push(baseColor.r, baseColor.g, baseColor.b);
+  });
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions,3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors,3));
   geo.computeVertexNormals();
-  const baseOp = opacity!==undefined?opacity:1;
-  const mat = new THREE.MeshStandardMaterial({color: colorFor(colorKey), roughness:0.68, metalness:0.06,
-    transparent:true, opacity:baseOp});
-  mat.userData.baseOpacity = baseOp;
-  return new THREE.Mesh(geo, mat);
+  const mat = new THREE.MeshStandardMaterial({vertexColors:true, roughness:0.68, metalness:0.06,
+    transparent:true, opacity:1});
+  mat.userData.baseOpacity = 1;
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.userData.floorId = floorId;
+  mesh.userData.cls = cls;
+  mesh.userData.segCount = segments.length;
+  mesh.userData.baseColorHex = '#'+baseColor.getHexString();
+  return mesh;
+}
+
+// Recolor one 36-vertex box (one wall segment) within a merged wall mesh.
+function setSegmentColor(mesh, segIndex, hexColor){
+  const c = new THREE.Color(hexColor);
+  const attr = mesh.geometry.attributes.color;
+  const start = segIndex*36;
+  for(let i=0;i<36;i++) attr.setXYZ(start+i, c.r, c.g, c.b);
+  attr.needsUpdate = true;
+}
+function lightenHex(hex, amt){
+  const c = new THREE.Color(hex);
+  c.lerp(new THREE.Color(0xffffff), amt);
+  return '#'+c.getHexString();
 }
 
 function makeCircleSlab(r,h,colorKey){
@@ -185,6 +253,12 @@ function makeBoxMesh(w,h,d,colorKey,opacity){
 // ---------- BUILD FLOORS ----------
 const floorGroups = {};
 const floorBBox = {};
+const wallMeshRegistry = {}; // floorId -> {wall:mesh, core:mesh, stair:mesh}
+// Tower floors (round, drawings H/I/J) are rotated 90° so Stair A/B — drawn
+// left-right on those sheets — line up with the podium floors' Stair A/B,
+// which run front-back. Rotation is applied to the whole floor group, so
+// walls, core, stairs, and the corridor ring all turn together.
+const TOWER_ROTATION = -Math.PI/2;
 
 FLOOR_META.forEach(f=>{
   const g = new THREE.Group();
@@ -198,6 +272,10 @@ FLOOR_META.forEach(f=>{
     buildingGroup.add(g);
     floorGroups[f.id] = g;
     return;
+  }
+
+  if(f.shape === 'circle'){
+    g.rotation.y = TOWER_ROTATION;
   }
 
   const wd = WALL_DATA[f.id];
@@ -224,14 +302,15 @@ FLOOR_META.forEach(f=>{
     g.add(ring);
   }
 
-  // traced walls: wall / core / stair, each merged into one mesh
+  // traced walls: wall / core / stair, each merged into one paintable mesh
   const bodyH = f.height*0.88;
-  const wallMesh  = buildWallMesh(wd.segments.wall,  bodyH, 'wall',  0.4, 1);
-  const coreMesh  = buildWallMesh(wd.segments.core,  bodyH, 'core',  0.4, 1);
-  const stairMesh = buildWallMesh(wd.segments.stair, bodyH, 'stair', 0.4, 1);
-  if(wallMesh) g.add(wallMesh);
-  if(coreMesh) g.add(coreMesh);
-  if(stairMesh) g.add(stairMesh);
+  const wallMesh  = buildWallMesh(wd.segments.wall,  bodyH, 'wall',  0.4, f.id, 'wall');
+  const coreMesh  = buildWallMesh(wd.segments.core,  bodyH, 'core',  0.4, f.id, 'core');
+  const stairMesh = buildWallMesh(wd.segments.stair, bodyH, 'stair', 0.4, f.id, 'stair');
+  wallMeshRegistry[f.id] = {};
+  if(wallMesh){ g.add(wallMesh); wallMeshRegistry[f.id].wall = wallMesh; }
+  if(coreMesh){ g.add(coreMesh); wallMeshRegistry[f.id].core = coreMesh; }
+  if(stairMesh){ g.add(stairMesh); wallMeshRegistry[f.id].stair = stairMesh; }
 
   buildingGroup.add(g);
   floorGroups[f.id] = g;
@@ -261,14 +340,21 @@ function makeRingWalls(r,r2,h,colorKey,opacity){
 // ---------- CONTINUOUS SHAFT INDICATORS ----------
 // Faint columns at the averaged real stair positions, spanning each zone,
 // to show the exit stairs are (approximately) continuous vertical shafts.
-function avgStairPos(ids, label){
+function rotateY(x,z,theta){
+  const c=Math.cos(theta), s=Math.sin(theta);
+  return {x: x*c+z*s, z: -x*s+z*c};
+}
+function avgStairPos(ids, label, rotate){
   let sx=0, sz=0, n=0;
   ids.forEach(id=>{
     const sl = (WALL_DATA[id]||{}).stairLabels || [];
     const s = sl.find(s=>s.label===label);
     if(s){ sx+=s.x; sz+=s.z; n++; }
   });
-  return n? {x:sx/n, z:sz/n} : null;
+  if(!n) return null;
+  let pos = {x:sx/n, z:sz/n};
+  if(rotate) pos = rotateY(pos.x, pos.z, TOWER_ROTATION);
+  return pos;
 }
 function addShaft(pos, yBottom, yTop, colorKey){
   if(!pos) return;
@@ -282,10 +368,10 @@ function addShaft(pos, yBottom, yTop, colorKey){
 const podiumIds = ['1','2','3','4','5','6'];
 const towerIds = ['7','8','9'];
 const f1 = FLOOR_META[0], f6 = FLOOR_META[5], gt = FLOOR_META[6], f9 = FLOOR_META[9];
-addShaft(avgStairPos(podiumIds,'A'), f1.y, f6.y+f6.height, 'stair');
-addShaft(avgStairPos(podiumIds,'B'), f1.y, f6.y+f6.height, 'stair');
-addShaft(avgStairPos(towerIds,'A'), gt.y, f9.y+f9.height, 'stair');
-addShaft(avgStairPos(towerIds,'B'), gt.y, f9.y+f9.height, 'stair');
+addShaft(avgStairPos(podiumIds,'A',false), f1.y, f6.y+f6.height, 'stair');
+addShaft(avgStairPos(podiumIds,'B',false), f1.y, f6.y+f6.height, 'stair');
+addShaft(avgStairPos(towerIds,'A',true), gt.y, f9.y+f9.height, 'stair');
+addShaft(avgStairPos(towerIds,'B',true), gt.y, f9.y+f9.height, 'stair');
 
 // ---------- LABEL SPRITES ----------
 function makeLabelSprite(text, sizePx){
@@ -336,7 +422,8 @@ function showFloorLabels(f){
   if(wd && wd.stairLabels){
     wd.stairLabels.forEach(s=>{
       const spr = makeLabelSprite('Stair '+s.label, 15);
-      spr.position.set(s.x, f.y+f.height+0.6, s.z);
+      const p = f.shape==='circle' ? rotateY(s.x, s.z, TOWER_ROTATION) : {x:s.x, z:s.z};
+      spr.position.set(p.x, f.y+f.height+0.6, p.z);
       labelGroup.add(spr);
     });
   }
@@ -365,13 +452,38 @@ function updateCamera(){
   camera.lookAt(target);
 }
 updateCamera();
-renderer.domElement.addEventListener('pointerdown', e=>{ isDragging=true; autoRotate=false; lastX=e.clientX; lastY=e.clientY; });
-window.addEventListener('pointerup', ()=> isDragging=false);
+let downInfo = null;
+renderer.domElement.addEventListener('pointerdown', e=>{
+  isDragging=true; autoRotate=false; lastX=e.clientX; lastY=e.clientY;
+  downInfo = {x:e.clientX, y:e.clientY, button:e.button};
+});
+window.addEventListener('pointerup', e=>{
+  isDragging=false;
+  if(downInfo && downInfo.button===0){
+    const moved = Math.hypot(e.clientX-downInfo.x, e.clientY-downInfo.y);
+    if(moved<4) handleLeftClick(e);
+  }
+  downInfo = null;
+});
 window.addEventListener('pointermove', e=>{
-  if(!isDragging) return;
-  const dx=e.clientX-lastX, dy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY;
-  spherical.theta -= dx*0.0055; spherical.phi -= dy*0.0055;
-  updateCamera();
+  if(isDragging){
+    const dx=e.clientX-lastX, dy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY;
+    spherical.theta -= dx*0.0055; spherical.phi -= dy*0.0055;
+    updateCamera();
+  } else if(e.target === renderer.domElement){
+    handleHover(e);
+  } else if(hoverState){
+    // pointer moved off-canvas onto a UI panel — revert any active hover highlight
+    const key = markupKey(hoverState.mesh, hoverState.segIndex);
+    const committed = markups[key] || hoverState.mesh.userData.baseColorHex;
+    setSegmentColor(hoverState.mesh, hoverState.segIndex, committed);
+    hoverState = null;
+    renderer.domElement.style.cursor = '';
+  }
+});
+renderer.domElement.addEventListener('contextmenu', e=>{
+  e.preventDefault();
+  handleRightClick(e);
 });
 renderer.domElement.addEventListener('wheel', e=>{
   e.preventDefault();
@@ -405,16 +517,18 @@ function focusOn(id){
   updateCamera();
 }
 function isolate(id){
+  currentIsolatedId = id;
   FLOOR_META.forEach(f=>{
     const g = floorGroups[f.id];
     g.visible = true;
     const dim = (id==='ALL') ? 1 : (f.id===id ? 1 : 0.05);
     setOpacity(g, dim);
   });
+  rebuildPickable();
 }
 function setOpacity(group, dim){
   group.traverse(o=>{
-    if(o.isMesh){
+    if(o.isMesh || o.isSprite){
       const base = (o.material.userData && o.material.userData.baseOpacity!==undefined) ? o.material.userData.baseOpacity : 1;
       o.material.opacity = base*dim;
     }
@@ -458,15 +572,374 @@ const LEGEND_ITEMS = [
   {c:'guest', n:'Guest rooms / corridor ring'},
 ];
 const legend = document.getElementById('legend');
+const legendEls = {};
 LEGEND_ITEMS.forEach(it=>{
-  const el = document.createElement('div'); el.className='item';
   const hex = '#'+colorFor(it.c).toString(16).padStart(6,'0');
+  const el = document.createElement('button');
+  el.className = 'legend-item';
   el.innerHTML = `<span class="sw" style="background:${hex}"></span>${it.n}`;
+  el.onclick = ()=> setActiveColor(hex, el);
   legend.appendChild(el);
+  legendEls[hex] = el;
 });
+const legendDivider = document.createElement('div');
+legendDivider.className = 'divider';
+legend.appendChild(legendDivider);
+const clearBtn = document.createElement('button');
+clearBtn.id = 'clearMarkupsBtn';
+clearBtn.textContent = 'Clear All Markups';
+clearBtn.onclick = clearAllMarkups;
+legend.appendChild(clearBtn);
+
+const labelModeBtn = document.createElement('button');
+labelModeBtn.id = 'labelModeBtn';
+labelModeBtn.textContent = '+ Label';
+labelModeBtn.onclick = ()=> setLabelMode(!labelModeArmed);
+legend.appendChild(labelModeBtn);
+
+function setActiveColor(hex, el){
+  if(activeColor===hex){
+    // clicking the already-armed colour again disarms it
+    activeColor = null;
+    if(el) el.classList.remove('armed');
+    hidePaintToast();
+    return;
+  }
+  activeColor = hex;
+  setLabelMode(false, true); // paint and label-add modes are mutually exclusive
+  Object.values(legendEls).forEach(e=>e.classList.remove('armed'));
+  if(el) el.classList.add('armed');
+  showPaintToast('Click a wall to paint it that colour · right-click to clear');
+}
+
+let paintToastTimer = null;
+function showPaintToast(msg){
+  const t = document.getElementById('paintToast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(paintToastTimer);
+  paintToastTimer = setTimeout(hidePaintToast, 3200);
+}
+function hidePaintToast(){
+  document.getElementById('paintToast').classList.remove('show');
+}
 
 showAllFloorTags();
 document.getElementById('metaSegs').textContent = totalSegs+' total';
+
+// ---------- WALL PAINT / MARKUP SYSTEM ----------
+let activeColor = null;
+let currentIsolatedId = 'ALL';
+let pickableMeshes = [];
+let pickableLabels = [];
+let hoverState = null; // {mesh, segIndex}
+let hoverLabel = null;
+let labelModeArmed = false;
+const markups = {}; // "floorId:cls:segIndex" -> "#rrggbb"
+const customLabels = {}; // id -> {sprite, floorId, x,y,z, text}
+const MARKUP_KEY = 'marriott3d_wall_markups_v1';
+const LABEL_KEY = 'marriott3d_custom_labels_v1';
+
+function rebuildPickable(){
+  pickableMeshes = [];
+  Object.keys(wallMeshRegistry).forEach(fid=>{
+    if(currentIsolatedId!=='ALL' && fid!==currentIsolatedId) return;
+    const reg = wallMeshRegistry[fid];
+    ['wall','core','stair'].forEach(cls=>{ if(reg[cls]) pickableMeshes.push(reg[cls]); });
+  });
+  pickableLabels = [];
+  Object.keys(customLabels).forEach(id=>{
+    const r = customLabels[id];
+    if(currentIsolatedId!=='ALL' && r.floorId!==currentIsolatedId) return;
+    pickableLabels.push(r.sprite);
+  });
+}
+rebuildPickable();
+
+function markupKey(mesh, segIndex){ return mesh.userData.floorId+':'+mesh.userData.cls+':'+segIndex; }
+
+function loadMarkups(){
+  try{
+    const raw = localStorage.getItem(MARKUP_KEY);
+    if(raw){
+      const saved = JSON.parse(raw);
+      Object.keys(saved).forEach(k=> markups[k]=saved[k]);
+    }
+  }catch(e){ console.warn('Could not load saved wall colours:', e); }
+}
+function saveMarkups(){
+  try{ localStorage.setItem(MARKUP_KEY, JSON.stringify(markups)); }
+  catch(e){ console.warn('Could not save wall colours (localStorage unavailable):', e); }
+}
+function applyAllMarkups(){
+  Object.keys(markups).forEach(key=>{
+    const parts = key.split(':');
+    const fid = parts[0], cls = parts[1], idx = parseInt(parts[2],10);
+    const reg = wallMeshRegistry[fid];
+    if(reg && reg[cls] && idx < reg[cls].userData.segCount){
+      setSegmentColor(reg[cls], idx, markups[key]);
+    }
+  });
+}
+function clearAllMarkups(){
+  Object.keys(wallMeshRegistry).forEach(fid=>{
+    const reg = wallMeshRegistry[fid];
+    ['wall','core','stair'].forEach(cls=>{
+      const mesh = reg[cls];
+      if(!mesh) return;
+      for(let i=0;i<mesh.userData.segCount;i++) setSegmentColor(mesh, i, mesh.userData.baseColorHex);
+    });
+  });
+  Object.keys(markups).forEach(k=> delete markups[k]);
+  saveMarkups();
+  showPaintToast('All markups cleared');
+}
+
+const raycaster = new THREE.Raycaster();
+const mouseNDC = new THREE.Vector2();
+function pointerToNDC(e){
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouseNDC.x = ((e.clientX-rect.left)/rect.width)*2-1;
+  mouseNDC.y = -((e.clientY-rect.top)/rect.height)*2+1;
+}
+function pickSegment(e){
+  pointerToNDC(e);
+  raycaster.setFromCamera(mouseNDC, camera);
+  const hits = raycaster.intersectObjects(pickableMeshes, false);
+  if(hits.length===0) return null;
+  const hit = hits[0];
+  if(hit.faceIndex===undefined || hit.faceIndex===null) return null;
+  const segIndex = Math.floor(hit.faceIndex/12);
+  return {mesh:hit.object, segIndex};
+}
+
+function handleHover(e){
+  const pick = pickAny(e);
+  const hoveredLabel = pick && pick.type==='label' ? pick.object : null;
+  if(hoverLabel !== hoveredLabel){
+    if(hoverLabel) hoverLabel.scale.copy(hoverLabel.userData.baseScale);
+    if(hoveredLabel){
+      hoveredLabel.userData.baseScale = hoveredLabel.userData.baseScale || hoveredLabel.scale.clone();
+      hoveredLabel.scale.copy(hoveredLabel.userData.baseScale).multiplyScalar(1.12);
+    }
+    hoverLabel = hoveredLabel;
+  }
+  const wallPick = (pick && pick.type==='wall') ? pick : null;
+  const newKey = wallPick ? markupKey(wallPick.mesh, wallPick.segIndex) : null;
+  const prevKey = hoverState ? markupKey(hoverState.mesh, hoverState.segIndex) : null;
+  if(newKey!==prevKey){
+    if(hoverState){
+      const committed = markups[prevKey] || hoverState.mesh.userData.baseColorHex;
+      setSegmentColor(hoverState.mesh, hoverState.segIndex, committed);
+    }
+    if(wallPick){
+      const committed = markups[newKey] || wallPick.mesh.userData.baseColorHex;
+      setSegmentColor(wallPick.mesh, wallPick.segIndex, lightenHex(committed, 0.4));
+      hoverState = wallPick;
+    } else {
+      hoverState = null;
+    }
+  }
+  if(hoveredLabel) renderer.domElement.style.cursor = 'pointer';
+  else if(wallPick) renderer.domElement.style.cursor = (activeColor||labelModeArmed) ? 'crosshair' : 'pointer';
+  else renderer.domElement.style.cursor = '';
+}
+
+function handleLeftClick(e){
+  const pick = pickAny(e);
+  if(!pick) return;
+  if(pick.type==='label'){ editLabel(pick.object); return; }
+  // pick.type === 'wall'
+  if(labelModeArmed){
+    addLabelAt(pick.mesh.userData.floorId, pick.point, pick.normal);
+    return;
+  }
+  if(!activeColor){
+    showPaintToast('Select a colour above first, then click a wall');
+    return;
+  }
+  const key = markupKey(pick.mesh, pick.segIndex);
+  markups[key] = activeColor;
+  const displayColor = (hoverState && markupKey(hoverState.mesh,hoverState.segIndex)===key)
+    ? lightenHex(activeColor,0.4) : activeColor;
+  setSegmentColor(pick.mesh, pick.segIndex, displayColor);
+  saveMarkups();
+}
+function handleRightClick(e){
+  const pick = pickAny(e);
+  if(!pick) return;
+  if(pick.type==='label'){ deleteLabel(pick.object); return; }
+  const key = markupKey(pick.mesh, pick.segIndex);
+  if(markups[key]!==undefined){
+    delete markups[key];
+    const base = pick.mesh.userData.baseColorHex;
+    const displayColor = (hoverState && markupKey(hoverState.mesh,hoverState.segIndex)===key)
+      ? lightenHex(base,0.4) : base;
+    setSegmentColor(pick.mesh, pick.segIndex, displayColor);
+    saveMarkups();
+  }
+}
+
+// ---------- CUSTOM LABELS (add / edit / delete) ----------
+function setLabelMode(on, silent){
+  labelModeArmed = on;
+  labelModeBtn.classList.toggle('armed', on);
+  if(on){
+    activeColor = null;
+    Object.values(legendEls).forEach(e=>e.classList.remove('armed'));
+    if(!silent) showPaintToast('Click a wall to place a label there');
+  } else if(!silent){
+    hidePaintToast();
+  }
+}
+
+function makeCustomLabelSprite(text){
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  const scale = 4;
+  const fontSize = 15*scale;
+  ctx.font = `600 ${fontSize}px 'JetBrains Mono', monospace`;
+  const pad = 20*scale;
+  const w = Math.max(ctx.measureText(text).width + pad*2, 60*scale);
+  const h = fontSize + pad;
+  canvas.width = w; canvas.height = h;
+  ctx.font = `600 ${fontSize}px 'JetBrains Mono', monospace`;
+  ctx.fillStyle = 'rgba(20,15,4,0.88)';
+  ctx.strokeStyle = 'rgba(242,193,78,0.85)';
+  ctx.lineWidth = 3.5*scale;
+  const r = 6*scale;
+  ctx.beginPath();
+  ctx.moveTo(2*scale+r, 2*scale);
+  ctx.arcTo(w-2*scale, 2*scale, w-2*scale, h-2*scale, r);
+  ctx.arcTo(w-2*scale, h-2*scale, 2*scale, h-2*scale, r);
+  ctx.arcTo(2*scale, h-2*scale, 2*scale, 2*scale, r);
+  ctx.arcTo(2*scale, 2*scale, w-2*scale, 2*scale, r);
+  ctx.closePath();
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#fbe6b8';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, pad, h/2);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.minFilter = THREE.LinearFilter;
+  const mat = new THREE.SpriteMaterial({map:tex, depthTest:false, transparent:true, opacity:1});
+  mat.userData.baseOpacity = 1;
+  const sprite = new THREE.Sprite(mat);
+  const aspect = w/h;
+  const baseH = 15/9;
+  sprite.scale.set(baseH*aspect, baseH, 1);
+  sprite.userData.baseScale = sprite.scale.clone();
+  sprite.renderOrder = 1000;
+  return sprite;
+}
+
+function addLabelAt(floorId, worldPoint, normal){
+  const text = prompt('Label text:', '');
+  if(text===null || text.trim()==='') return;
+  const g = floorGroups[floorId];
+  const offset = worldPoint.clone();
+  if(normal) offset.addScaledVector(normal, 0.9);
+  offset.y += 0.7;
+  const local = g.worldToLocal(offset);
+  const id = 'lbl_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+  createLabel(id, floorId, local.x, local.y, local.z, text.trim(), true);
+}
+function createLabel(id, floorId, x, y, z, text, persist){
+  const sprite = makeCustomLabelSprite(text);
+  sprite.position.set(x,y,z);
+  sprite.userData.labelId = id;
+  floorGroups[floorId].add(sprite);
+  customLabels[id] = {sprite, floorId, x, y, z, text};
+  if(persist) saveLabels();
+  rebuildPickable();
+}
+function editLabel(sprite){
+  const id = sprite.userData.labelId;
+  const rec = customLabels[id];
+  if(!rec) return;
+  const text = prompt('Edit label (leave empty to delete):', rec.text);
+  if(text===null) return;
+  if(text.trim()===''){ deleteLabel(sprite); return; }
+  rec.text = text.trim();
+  const floorId = rec.floorId, pos = sprite.position.clone();
+  floorGroups[floorId].remove(sprite);
+  const newSprite = makeCustomLabelSprite(rec.text);
+  newSprite.position.copy(pos);
+  newSprite.userData.labelId = id;
+  floorGroups[floorId].add(newSprite);
+  rec.sprite = newSprite;
+  if(hoverLabel===sprite) hoverLabel = null;
+  saveLabels();
+  rebuildPickable();
+}
+function deleteLabel(sprite){
+  const id = sprite.userData.labelId;
+  const rec = customLabels[id];
+  if(!rec) return;
+  floorGroups[rec.floorId].remove(sprite);
+  if(hoverLabel===sprite) hoverLabel = null;
+  delete customLabels[id];
+  saveLabels();
+  rebuildPickable();
+}
+function loadLabels(){
+  try{
+    const raw = localStorage.getItem(LABEL_KEY);
+    if(!raw) return;
+    const saved = JSON.parse(raw);
+    Object.keys(saved).forEach(id=>{
+      const r = saved[id];
+      if(floorGroups[r.floorId]) createLabel(id, r.floorId, r.x, r.y, r.z, r.text, false);
+    });
+  }catch(e){ console.warn('Could not load saved labels:', e); }
+}
+function saveLabels(){
+  try{
+    const out = {};
+    Object.keys(customLabels).forEach(id=>{
+      const r = customLabels[id];
+      out[id] = {floorId:r.floorId, x:r.x, y:r.y, z:r.z, text:r.text};
+    });
+    localStorage.setItem(LABEL_KEY, JSON.stringify(out));
+  }catch(e){ console.warn('Could not save labels (localStorage unavailable):', e); }
+}
+function clearAllLabels(){
+  Object.keys(customLabels).forEach(id=>{
+    const r = customLabels[id];
+    floorGroups[r.floorId].remove(r.sprite);
+    delete customLabels[id];
+  });
+  hoverLabel = null;
+  saveLabels();
+  rebuildPickable();
+}
+
+// combined raycast: labels take priority when both are under the cursor
+// at similar depth, since intersectObjects already sorts by distance
+function pickAny(e){
+  pointerToNDC(e);
+  raycaster.setFromCamera(mouseNDC, camera);
+  const hits = raycaster.intersectObjects(pickableLabels.concat(pickableMeshes), false);
+  if(hits.length===0) return null;
+  const hit = hits[0];
+  if(hit.object.isSprite){
+    return {type:'label', object:hit.object};
+  }
+  if(hit.faceIndex===undefined || hit.faceIndex===null) return null;
+  const segIndex = Math.floor(hit.faceIndex/12);
+  let normal = new THREE.Vector3(0,1,0);
+  if(hit.face){
+    const nm = new THREE.Matrix3().getNormalMatrix(hit.object.matrixWorld);
+    normal = hit.face.normal.clone().applyMatrix3(nm).normalize();
+  }
+  return {type:'wall', mesh:hit.object, segIndex, point:hit.point, normal};
+}
+
+// load + apply any previously saved wall colours and labels
+loadMarkups();
+applyAllMarkups();
+loadLabels();
+
+clearBtn.onclick = ()=>{ clearAllMarkups(); clearAllLabels(); };
 
 window.addEventListener('resize', ()=>{
   camera.aspect = window.innerWidth/window.innerHeight;
@@ -477,6 +950,7 @@ function animate(){
   requestAnimationFrame(animate);
   if(autoRotate){ spherical.theta += 0.0009; updateCamera(); }
   labelGroup.children.forEach(s=> s.quaternion.copy(camera.quaternion));
+  Object.values(customLabels).forEach(r=> r.sprite.quaternion.copy(camera.quaternion));
   renderer.render(scene, camera);
 }
 animate();
