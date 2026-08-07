@@ -640,6 +640,13 @@ const customLabels = {}; // id -> {sprite, floorId, x,y,z, text}
 const MARKUP_KEY = 'marriott3d_wall_markups_v1';
 const LABEL_KEY = 'marriott3d_custom_labels_v1';
 
+// Baked-in starting markups/labels (exported from a previous session).
+// These seed localStorage on first load only — if the browser already has
+// its own saved state under these keys, that takes priority and these are
+// ignored, so re-opening the file never clobbers someone's own edits.
+const DEFAULT_MARKUPS = {"9:stair:14":"#6f92ab","9:wall:25":"#ff5a4e","9:wall:29":"#ff5a4e","9:wall:39":"#ff5a4e","9:wall:34":"#ff5a4e","9:wall:94":"#ff5a4e","9:wall:36":"#ff5a4e","9:wall:31":"#ff5a4e","9:wall:26":"#ff5a4e","9:wall:91":"#ff5a4e","9:wall:95":"#ff5a4e","9:wall:37":"#ff5a4e","9:wall:32":"#ff5a4e","9:wall:27":"#ff5a4e","9:wall:23":"#ff5a4e","9:wall:90":"#ff5a4e","9:wall:96":"#ff5a4e","9:wall:97":"#ff5a4e","9:wall:30":"#ff5a4e","9:wall:35":"#ff5a4e","9:wall:24":"#ff5a4e","9:stair:6":"#6f92ab","8:stair:14":"#e8a13c","8:stair:38":"#e8a13c","8:stair:28":"#e8a13c","8:stair:1":"#e8a13c","8:stair:9":"#e8a13c","8:stair:12":"#e8a13c","8:stair:0":"#ff5a4e","8:stair:26":"#ff5a4e","8:core:54":"#ff5a4e","8:wall:114":"#ff5a4e","8:wall:115":"#ff5a4e","8:stair:23":"#ff5a4e","8:wall:44":"#ff5a4e","8:wall:116":"#ff5a4e","8:wall:41":"#ff5a4e","8:wall:40":"#ff5a4e","8:wall:37":"#ff5a4e","8:wall:38":"#ff5a4e","8:wall:39":"#ff5a4e","8:wall:109":"#ff5a4e","8:wall:107":"#ff5a4e","8:wall:106":"#ff5a4e","8:wall:104":"#ff5a4e","8:wall:102":"#ff5a4e","8:wall:101":"#ff5a4e","8:wall:100":"#ff5a4e","8:wall:99":"#ff5a4e","8:wall:98":"#ff5a4e","8:wall:97":"#ff5a4e","8:wall:33":"#ff5a4e","8:wall:103":"#ff5a4e","8:wall:105":"#ff5a4e","8:wall:108":"#ff5a4e","9:wall:122":"#ff5a4e","9:wall:124":"#ff5a4e","9:wall:68":"#ff5a4e","9:wall:70":"#ff5a4e","9:wall:123":"#ff5a4e","9:wall:72":"#ff5a4e","9:wall:128":"#ff5a4e","9:wall:127":"#ff5a4e","9:wall:126":"#ff5a4e","9:wall:69":"#ff5a4e","9:wall:130":"#ff5a4e","9:wall:71":"#ff5a4e","9:wall:129":"#ff5a4e","9:wall:125":"#ff5a4e","9:wall:58":"#ff5a4e","9:wall:65":"#ff5a4e","9:wall:67":"#ff5a4e","9:wall:63":"#ff5a4e","9:wall:60":"#ff5a4e","9:wall:61":"#ff5a4e","9:wall:64":"#ff5a4e","9:wall:66":"#ff5a4e","9:wall:131":"#ff5a4e","8:wall:28":"#ff5a4e","8:wall:26":"#ff5a4e","8:wall:89":"#ff5a4e","8:wall:25":"#ff5a4e","8:wall:24":"#ff5a4e","8:wall:21":"#6f92ab","8:wall:18":"#ff5a4e","8:wall:16":"#ff5a4e","8:wall:90":"#ff5a4e","8:wall:15":"#ff5a4e","8:wall:17":"#ff5a4e","8:wall:87":"#ff5a4e","8:wall:10":"#ff5a4e","8:wall:85":"#ff5a4e","8:wall:13":"#ff5a4e","8:wall:14":"#ff5a4e","8:wall:88":"#ff5a4e","8:wall:93":"#ff5a4e","8:wall:91":"#ff5a4e","8:wall:23":"#ff5a4e","8:wall:27":"#ff5a4e","8:wall:92":"#ff5a4e","8:wall:84":"#ff5a4e","8:wall:83":"#ff5a4e","8:wall:86":"#ff5a4e","8:wall:9":"#ff5a4e","7:core:3":"#ff5a4e","7:core:7":"#ff5a4e","7:core:11":"#ff5a4e","7:core:20":"#ff5a4e","7:core:67":"#ff5a4e","7:core:27":"#ff5a4e","7:core:35":"#ff5a4e","7:core:64":"#ff5a4e","7:core:63":"#ff5a4e","7:core:33":"#ff5a4e","7:core:29":"#ff5a4e","7:core:4":"#ff5a4e","7:core:5":"#ff5a4e","7:core:8":"#ff5a4e","7:core:14":"#ff5a4e","7:core:21":"#ff5a4e","7:core:13":"#ff5a4e","7:core:28":"#ff5a4e","7:core:32":"#ff5a4e","7:core:30":"#ff5a4e","7:core:36":"#ff5a4e","7:core:34":"#ff5a4e","7:core:68":"#ff5a4e","7:core:66":"#ff5a4e","7:core:65":"#ff5a4e","7:core:6":"#ff5a4e","7:core:52":"#ff5a4e","7:core:53":"#ff5a4e","7:core:54":"#ff5a4e","7:core:55":"#ff5a4e","7:wall:12":"#ff5a4e","7:wall:11":"#ff5a4e","7:wall:74":"#ff5a4e","7:stair:7":"#ff5a4e","7:wall:75":"#ff5a4e","7:core:56":"#6f92ab","7:core:51":"#6f92ab","7:core:47":"#6f92ab","7:core:43":"#6f92ab","7:core:42":"#6f92ab","7:core:82":"#6f92ab","7:core:83":"#6f92ab","7:core:50":"#6f92ab","7:core:49":"#6f92ab","7:core:48":"#6f92ab","7:core:79":"#6f92ab","7:core:80":"#6f92ab","7:core:59":"#6f92ab","7:core:46":"#6f92ab","7:core:44":"#6f92ab","7:core:81":"#6f92ab","7:core:57":"#6f92ab","7:core:45":"#6f92ab","7:core:0":"#6f92ab","7:core:31":"#ff5a4e","7:wall:42":"#ff5a4e","7:wall:145":"#ff5a4e","7:wall:144":"#ff5a4e","7:wall:148":"#ff5a4e","7:wall:55":"#ff5a4e","7:wall:54":"#ff5a4e","7:wall:143":"#ff5a4e","7:wall:133":"#ff5a4e","7:wall:40":"#ff5a4e","7:wall:142":"#ff5a4e","7:wall:147":"#ff5a4e","7:wall:53":"#ff5a4e","7:wall:51":"#ff5a4e","7:wall:48":"#ff5a4e","7:wall:45":"#ff5a4e","7:wall:43":"#ff5a4e","7:wall:50":"#ff5a4e","7:wall:39":"#ff5a4e","7:wall:141":"#ff5a4e","7:wall:140":"#ff5a4e","7:wall:139":"#ff5a4e","7:wall:138":"#ff5a4e","7:wall:137":"#ff5a4e","7:wall:136":"#ff5a4e","7:wall:135":"#ff5a4e","7:wall:134":"#ff5a4e","3:stair:12":"#6f92ab","3:core:9":"#ff5a4e","3:core:18":"#ff5a4e","3:wall:304":"#ff5a4e","3:core:17":"#ff5a4e","3:core:20":"#e8a13c","3:core:23":"#ff5a4e","3:core:26":"#ff5a4e","3:core:27":"#ff5a4e","3:core:29":"#ff5a4e","3:core:28":"#ff5a4e","3:core:62":"#ff5a4e","3:wall:95":"#ff5a4e","3:wall:91":"#ff5a4e","3:wall:85":"#ff5a4e","3:wall:97":"#ff5a4e","3:wall:94":"#ff5a4e","3:wall:306":"#ff5a4e","3:wall:100":"#ff5a4e","3:wall:295":"#ff5a4e","3:wall:305":"#ff5a4e","3:wall:98":"#ff5a4e","3:wall:72":"#ff5a4e","3:wall:88":"#ff5a4e","3:wall:84":"#ff5a4e","3:wall:83":"#ff5a4e","1:wall:72":"#ff5a4e","1:wall:227":"#ff5a4e","1:wall:228":"#ff5a4e","1:wall:229":"#ff5a4e","1:wall:238":"#ff5a4e","1:wall:233":"#ff5a4e","1:wall:74":"#ff5a4e","1:wall:226":"#ff5a4e","1:wall:75":"#ff5a4e","1:wall:230":"#ff5a4e","1:wall:231":"#ff5a4e","1:wall:76":"#ff5a4e","1:wall:77":"#ff5a4e","1:wall:232":"#ff5a4e","1:wall:217":"#ff5a4e","1:core:35":"#ff5a4e","1:core:34":"#ff5a4e","1:core:3":"#ff5a4e","1:core:40":"#ff5a4e","1:core:37":"#ff5a4e","1:core:6":"#ff5a4e","1:core:38":"#ff5a4e","1:core:41":"#ff5a4e","1:core:42":"#ff5a4e","1:core:4":"#ff5a4e","1:core:43":"#ff5a4e","1:core:39":"#ff5a4e","1:core:5":"#ff5a4e","1:core:36":"#ff5a4e","1:core:44":"#ff5a4e","1:core:7":"#ff5a4e","1:core:45":"#ff5a4e","1:core:9":"#ff5a4e","1:core:8":"#ff5a4e","1:stair:18":"#e8a13c"};
+const DEFAULT_LABELS = {"lbl_1786112634957_hudqf":{"floorId":"9","x":1.7697321528035381,"y":6.047999954223641,"z":-12.224254087422384,"text":"Stair C"},"lbl_1786112683759_1tu9y":{"floorId":"8","x":1.558673465251921,"y":4.948908466194013,"z":14.761654826265822,"text":"Stair C"},"lbl_1786112909557_e0c4h":{"floorId":"3","x":13.590429657226078,"y":5.424037148454858,"z":-0.6121825933456421,"text":"Stair B"}};
+
 function rebuildPickable(){
   pickableMeshes = [];
   Object.keys(wallMeshRegistry).forEach(fid=>{
@@ -659,13 +666,17 @@ rebuildPickable();
 function markupKey(mesh, segIndex){ return mesh.userData.floorId+':'+mesh.userData.cls+':'+segIndex; }
 
 function loadMarkups(){
+  let saved = null;
   try{
     const raw = localStorage.getItem(MARKUP_KEY);
-    if(raw){
-      const saved = JSON.parse(raw);
-      Object.keys(saved).forEach(k=> markups[k]=saved[k]);
-    }
+    if(raw) saved = JSON.parse(raw);
   }catch(e){ console.warn('Could not load saved wall colours:', e); }
+  if(!saved && DEFAULT_MARKUPS && Object.keys(DEFAULT_MARKUPS).length){
+    saved = DEFAULT_MARKUPS;
+    try{ localStorage.setItem(MARKUP_KEY, JSON.stringify(saved)); }
+    catch(e){ console.warn('Could not seed localStorage with default markups:', e); }
+  }
+  if(saved) Object.keys(saved).forEach(k=> markups[k]=saved[k]);
 }
 function saveMarkups(){
   try{ localStorage.setItem(MARKUP_KEY, JSON.stringify(markups)); }
@@ -882,15 +893,22 @@ function deleteLabel(sprite){
   rebuildPickable();
 }
 function loadLabels(){
+  let saved = null;
   try{
     const raw = localStorage.getItem(LABEL_KEY);
-    if(!raw) return;
-    const saved = JSON.parse(raw);
+    if(raw) saved = JSON.parse(raw);
+  }catch(e){ console.warn('Could not load saved labels:', e); }
+  if(!saved && DEFAULT_LABELS && Object.keys(DEFAULT_LABELS).length){
+    saved = DEFAULT_LABELS;
+    try{ localStorage.setItem(LABEL_KEY, JSON.stringify(saved)); }
+    catch(e){ console.warn('Could not seed localStorage with default labels:', e); }
+  }
+  if(saved){
     Object.keys(saved).forEach(id=>{
       const r = saved[id];
       if(floorGroups[r.floorId]) createLabel(id, r.floorId, r.x, r.y, r.z, r.text, false);
     });
-  }catch(e){ console.warn('Could not load saved labels:', e); }
+  }
 }
 function saveLabels(){
   try{
